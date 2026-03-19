@@ -1,0 +1,562 @@
+<div class="page">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <h1>Add Attribute <span>— Data Dictionary</span></h1>
+    </div>
+    <button class="btn-icon" title="Close">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M18 6L6 18M6 6l12 12"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- ════════════════ ATTRIBUTE DETAILS ════════════════ -->
+  <div class="section" [class.focused]="attrOpen">
+    <div class="section-header" (click)="attrOpen = !attrOpen">
+      <div class="section-title">
+        <span class="section-dot"></span>
+        Attribute Details
+      </div>
+      <svg class="chevron" [class.open]="attrOpen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </div>
+
+    <div class="section-body" *ngIf="attrOpen">
+      <!-- Maintenance Agency -->
+      <div class="form-row single narrow">
+        <div class="form-group">
+          <label class="field-label required">Maintenance Agency</label>
+          <input type="text" [(ngModel)]="formData.maintenanceAgency" />
+        </div>
+      </div>
+
+      <!-- Code + Name -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="field-label required">Code</label>
+          <input type="text" [(ngModel)]="formData.code" placeholder="e.g. EMAIL_ADDR" />
+        </div>
+        <div class="form-group">
+          <label class="field-label required">Name</label>
+          <input type="text" [(ngModel)]="formData.name" placeholder="e.g. Email Address" />
+        </div>
+      </div>
+
+      <!-- Generic Description -->
+      <div class="form-group">
+        <div class="desc-header">
+          <label class="field-label">Generic Description</label>
+          <span class="badge badge-ai" *ngIf="aiActive()">✦ AI active</span>
+        </div>
+        <textarea
+          [(ngModel)]="formData.genericDescription"
+          (ngModelChange)="onDescriptionChange($event)"
+          placeholder="Describe the attribute you want to create…"
+          rows="3">
+        </textarea>
+
+        <!-- AI Panel -->
+        <div class="ai-panel">
+          <div class="ai-panel-text">
+            <p>AI Generation</p>
+            <span *ngIf="remainingChars > 0">{{ remainingChars }} more characters needed</span>
+            <span *ngIf="remainingChars === 0">Ready to generate attribute fields from your description</span>
+          </div>
+          <button class="btn btn-primary btn-sm" [disabled]="remainingChars > 0" (click)="openGenerateModal()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+            </svg>
+            Generate with AI
+          </button>
+        </div>
+
+        <!-- Similar results -->
+        <div class="similar-section" *ngIf="aiActive()">
+          <div class="similar-header" *ngIf="!isLoadingSimilar() && similarResults().length > 0">
+            <p>Similar existing concepts found:</p>
+            <button class="btn-link" (click)="showConceptModal = true">
+              Show all {{ similarResults().length }} matches
+            </button>
+          </div>
+
+          <div class="loading-row" *ngIf="isLoadingSimilar()">
+            <div class="spinner"></div>
+            Finding similar concepts…
+          </div>
+          <div *ngIf="isLoadingSimilar()">
+            <div class="skeleton"></div>
+            <div class="skeleton"></div>
+          </div>
+
+          <div *ngIf="!isLoadingSimilar()">
+            <div class="concept-card" *ngFor="let r of shownResults">
+              <div class="concept-info">
+                <div class="concept-name-row">
+                  <span class="concept-name">{{ r.metadata['name'] || r.metadata['title'] }}</span>
+                  <span class="badge badge-match">{{ r.metadata['code'] || r.metadata['source'] }}</span>
+                  <span class="badge-pct">{{ scorePercent(r.score) }}%</span>
+                </div>
+                <div class="concept-desc">{{ r.text }}</div>
+                <div class="concept-meta" *ngIf="r.metadata['section']">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  {{ r.metadata['source'] }} · p.{{ r.metadata['page'] }} · {{ r.metadata['section'] }}
+                </div>
+              </div>
+              <button class="btn btn-ghost btn-sm" (click)="applyConcept(r)">Apply</button>
+            </div>
+            <p class="no-results" *ngIf="similarResults().length === 0">
+              No similar concepts found. This appears to be a new attribute.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Additional Description -->
+      <div class="form-group">
+        <label class="field-label">Additional Description</label>
+        <textarea [(ngModel)]="formData.additionalDescription" placeholder="Optional supplementary details…" rows="3"></textarea>
+      </div>
+
+      <!-- Role + Data Type -->
+      <div class="form-row">
+        <div class="form-group">
+          <label class="field-label required">Role</label>
+          <select [(ngModel)]="formData.role">
+            <option value="">Select role…</option>
+            <option>Identifier</option>
+            <option>Attribute</option>
+            <option>Measure</option>
+            <option>Dimension</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="field-label required">Logical Data Type</label>
+          <input type="text" [(ngModel)]="formData.logicalDataType" placeholder="e.g. String, Decimal…" />
+        </div>
+      </div>
+
+      <!-- Enumerated -->
+      <div class="checkbox-row">
+        <label class="checkbox-wrap">
+          <input type="checkbox" [(ngModel)]="formData.enumerated" />
+          <span class="checkbox-custom">
+            <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.5">
+              <path d="M2 6l3 3 5-5"/>
+            </svg>
+          </span>
+          <span class="checkbox-label">Enumerated</span>
+        </label>
+      </div>
+
+      <!-- Domain Members -->
+      <div class="inner-card fade-in" *ngIf="formData.enumerated">
+        <div class="inner-card-header">
+          <p class="inner-card-title">Domain Members</p>
+          <button class="btn btn-secondary btn-sm" (click)="openMemberModal()">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <path d="M12 5v14M5 12h14"/>
+            </svg>
+            Add Member
+          </button>
+        </div>
+        <div class="empty-state" *ngIf="members.length === 0">
+          No members yet. Click "Add Member" to add domain values.
+        </div>
+        <div class="member-row" *ngFor="let m of members">
+          <div>
+            <span class="member-code">{{ m.code }}</span>
+            <span class="member-name">{{ m.name }}</span>
+          </div>
+          <button class="btn-icon sm" (click)="removeMember(m.id)">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Linked Legal Refs -->
+      <div class="inner-card fade-in" *ngIf="linkedRefs.length > 0">
+        <p class="inner-card-title">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:5px;">
+            <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/>
+          </svg>
+          Linked Legal References
+        </p>
+        <div class="legal-ref-row" *ngFor="let ref of linkedRefs">
+          <div class="legal-ref-left">
+            <span class="badge-source">{{ ref.source }}</span>
+            <span class="legal-ref-title">{{ ref.title }}</span>
+          </div>
+          <button class="btn-icon sm" (click)="removeLinkedRef(ref.id)">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════ RESTRICTION DETAILS ════════════════ -->
+  <div class="section">
+    <div class="section-header" (click)="restrOpen = !restrOpen">
+      <div class="section-title">
+        <span class="section-dot accent2"></span>
+        Restriction Details
+      </div>
+      <svg class="chevron" [class.open]="restrOpen" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M6 9l6 6 6-6"/>
+      </svg>
+    </div>
+
+    <div class="section-body" *ngIf="restrOpen">
+      <!-- Tabs -->
+      <div class="tabs-bar">
+        <button class="tab-btn" [class.active]="activeTab === 'subdomain'" (click)="activeTab = 'subdomain'">Subdomain</button>
+        <button class="tab-btn" [class.active]="activeTab === 'variableset'" (click)="activeTab = 'variableset'">Variable Set</button>
+      </div>
+
+      <!-- Subdomain -->
+      <div *ngIf="activeTab === 'subdomain'">
+        <div class="form-row single narrow">
+          <div class="form-group">
+            <label class="field-label">Maintenance Agency</label>
+            <input type="text" [value]="formData.maintenanceAgency" disabled />
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="field-label required">Code</label>
+            <input type="text" [(ngModel)]="formData.subdomainCode" />
+          </div>
+          <div class="form-group">
+            <label class="field-label required">Name</label>
+            <input type="text" [(ngModel)]="formData.subdomainName" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="field-label">Description</label>
+          <textarea [(ngModel)]="formData.subdomainDescription" rows="2"></textarea>
+        </div>
+        <div class="form-group narrow">
+          <label class="field-label required">Value Type</label>
+          <select [(ngModel)]="formData.subdomainValueType">
+            <option value="">Select Value Type…</option>
+            <option>String</option><option>Integer</option>
+            <option>Decimal</option><option>Date</option><option>Boolean</option>
+          </select>
+        </div>
+
+        <!-- Constraints -->
+        <div class="inner-card">
+          <p class="inner-card-title">Constraints</p>
+          <div class="form-row" style="margin-bottom:10px">
+            <div class="form-group">
+              <label class="field-label">Type *</label>
+              <select [(ngModel)]="newConstraintType">
+                <option value="">Select type…</option>
+                <option value="minLength">Min Length</option>
+                <option value="maxLength">Max Length</option>
+                <option value="pattern">Pattern</option>
+                <option value="minValue">Min Value</option>
+                <option value="maxValue">Max Value</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="field-label">Value *</label>
+              <input type="text" [(ngModel)]="newConstraintValue" placeholder="e.g. 255" />
+            </div>
+          </div>
+          <div style="display:flex;justify-content:flex-end;margin-bottom:10px">
+            <button class="btn btn-secondary btn-sm" (click)="addConstraint()">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M20 6L9 17l-5-5"/>
+              </svg>
+              Add
+            </button>
+          </div>
+
+          <div class="alert alert-amber" *ngIf="constraints.length > 1">
+            <span class="alert-icon">⚠</span>
+            <div>
+              <p class="alert-title">Consider decomposing this variable</p>
+              <p class="alert-text">Multiple constraints may indicate this variable represents multiple concepts.</p>
+            </div>
+          </div>
+
+          <div class="constraint-tag" *ngFor="let c of constraints">
+            <span><strong>{{ c.type }}</strong>: {{ c.value }}</span>
+            <button class="btn-icon sm" (click)="removeConstraint(c.id)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Variable Set -->
+      <div *ngIf="activeTab === 'variableset'">
+        <p class="coming-soon">Variable Set configuration coming soon…</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <label class="checkbox-wrap">
+      <input type="checkbox" [(ngModel)]="addAnother" />
+      <span class="checkbox-custom">
+        <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.5">
+          <path d="M2 6l3 3 5-5"/>
+        </svg>
+      </span>
+      <span class="checkbox-label">Add another</span>
+    </label>
+    <div class="footer-actions">
+      <button class="btn btn-secondary">Cancel</button>
+      <button class="btn btn-primary">Create Attribute</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════ MODAL: ADD MEMBER ════════════════ -->
+<div class="modal-overlay" [class.open]="showMemberModal" (click)="showMemberModal = false">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12h14"/>
+        </svg>
+        Add Domain Member
+      </div>
+      <button class="btn-icon" (click)="showMemberModal = false">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="field-label required">Code</label>
+          <input type="text" [(ngModel)]="newMember.code" placeholder="e.g. VAL_001" />
+        </div>
+        <div class="form-group">
+          <label class="field-label required">Name</label>
+          <input type="text" [(ngModel)]="newMember.name" placeholder="e.g. Active Status" />
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="field-label">Description</label>
+        <textarea [(ngModel)]="newMember.description" (ngModelChange)="onMemberDescChange($event)" placeholder="Describe the member value…" rows="2"></textarea>
+        <p class="hint">AI will check if this should be split into multiple members</p>
+      </div>
+
+      <div class="alert alert-amber fade-in" *ngIf="decomposeList.length > 1">
+        <span class="alert-icon">⚠</span>
+        <div>
+          <p class="alert-title">Multiple concepts detected</p>
+          <p class="alert-text">{{ decomposeList.length }} separate concepts found:</p>
+          <ul class="decompose-list">
+            <li *ngFor="let c of decomposeList">{{ c }}</li>
+          </ul>
+          <div class="decompose-actions">
+            <button class="btn btn-secondary btn-sm" (click)="decomposeList = []">Keep as One</button>
+            <button class="btn btn-amber btn-sm" (click)="splitMembers()">
+              Split into {{ decomposeList.length }} Members
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="showMemberModal = false">Cancel</button>
+      <button class="btn btn-primary" [disabled]="!newMember.code || !newMember.name" (click)="addMember()">
+        Add Member
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════ MODAL: AI GENERATE ════════════════ -->
+<div class="modal-overlay" [class.open]="showGenerateModal" (click)="showGenerateModal = false">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--accent)">
+          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+        </svg>
+        AI Attribute Generator
+      </div>
+      <button class="btn-icon" (click)="showGenerateModal = false">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Generate step -->
+    <div class="modal-body" *ngIf="wizardStep === 'generate'">
+      <div class="generating" *ngIf="isGenerating">
+        <div class="spinner"></div>
+        <span>Generating attribute from description…</span>
+      </div>
+      <div *ngIf="!isGenerating && generatedData" class="fade-in">
+        <p class="modal-hint">Based on your description, here's the generated attribute:</p>
+        <div class="preview-card">
+          <div class="form-row" style="margin-bottom:12px">
+            <div>
+              <p class="preview-label">Code</p>
+              <p class="preview-value mono">{{ generatedData.code }}</p>
+            </div>
+            <div>
+              <p class="preview-label">Name</p>
+              <p class="preview-value">{{ generatedData.name }}</p>
+            </div>
+          </div>
+          <div style="margin-bottom:12px">
+            <p class="preview-label">Description</p>
+            <p class="preview-value muted">{{ generatedData.description }}</p>
+          </div>
+          <div class="form-row">
+            <div>
+              <p class="preview-label">Role</p>
+              <p class="preview-value">{{ generatedData.role }}</p>
+            </div>
+            <div>
+              <p class="preview-label">Data Type</p>
+              <p class="preview-value">{{ generatedData.dataType }}</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="preview-card" *ngIf="selectedLegalIds().length > 0" style="margin-top:12px">
+          <p class="inner-card-title" style="margin-bottom:8px">Linked Legal References ({{ selectedLegalIds().length }})</p>
+          <div *ngFor="let ref of allLegal">
+            <div class="legal-mini-row" *ngIf="isLegalSelected(ref.id)">
+              <span class="badge-source">{{ ref.source }}</span>
+              <span class="legal-ref-title">{{ ref.title }}</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="btn btn-secondary full" (click)="goToLegal()">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/>
+          </svg>
+          Add Legal References
+        </button>
+      </div>
+    </div>
+
+    <!-- Legal step -->
+    <div class="modal-body" *ngIf="wizardStep === 'legal'">
+      <button class="btn btn-ghost btn-sm back-btn" (click)="wizardStep = 'generate'">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 12H5M12 5l-7 7 7 7"/>
+        </svg>
+        Back to Preview
+      </button>
+      <div class="search-row">
+        <div class="search-wrap">
+          <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input type="text" [(ngModel)]="legalQuery" placeholder="Search legal references…" (input)="filterLegal()" />
+        </div>
+        <select [(ngModel)]="legalFilter" (change)="filterLegal()" style="width:130px">
+          <option value="all">All Sources</option>
+          <option value="GDPR">GDPR</option>
+          <option value="MiFID II">MiFID II</option>
+        </select>
+      </div>
+
+      <div class="legal-scroll">
+        <div class="legal-card" *ngFor="let ref of filteredLegal()"
+             [class.selected]="isLegalSelected(ref.id)"
+             (click)="toggleLegalRef(ref.id)">
+          <div class="legal-card-top">
+            <div>
+              <div class="legal-card-badges">
+                <span class="badge-source">{{ ref.source }}</span>
+                <span class="badge-pct">{{ ref.confidence }}% match</span>
+              </div>
+              <p class="legal-card-title">{{ ref.title }}</p>
+            </div>
+            <div class="check-circle" [class.checked]="isLegalSelected(ref.id)">
+              <svg *ngIf="isLegalSelected(ref.id)" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.5">
+                <path d="M2 6l3 3 5-5"/>
+              </svg>
+            </div>
+          </div>
+          <p class="legal-card-snippet">{{ ref.snippet }}</p>
+          <div class="kw-list">
+            <span class="kw-tag" *ngFor="let kw of ref.keywords">{{ kw }}</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary full" *ngIf="selectedLegalIds().length > 0" (click)="linkAndContinue()">
+        Link {{ selectedLegalIds().length }} Reference{{ selectedLegalIds().length > 1 ? 's' : '' }} &amp; Continue
+      </button>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" (click)="showGenerateModal = false">Cancel</button>
+      <button class="btn btn-primary" *ngIf="wizardStep === 'generate' && !isGenerating && generatedData"
+              (click)="applyGenerated()">
+        Apply to Form
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ════════════════ MODAL: CONCEPT LIBRARY ════════════════ -->
+<div class="modal-overlay" [class.open]="showConceptModal" (click)="showConceptModal = false">
+  <div class="modal wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <div class="modal-title">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        Concept Library
+      </div>
+      <button class="btn-icon" (click)="showConceptModal = false">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <p class="modal-hint" style="margin-bottom:14px">All similar concepts matching your description</p>
+      <div class="concept-card" *ngFor="let r of similarResults()">
+        <div class="concept-info">
+          <div class="concept-name-row">
+            <span class="concept-name">{{ r.metadata['name'] || r.metadata['code'] }}</span>
+            <span class="badge badge-match">{{ r.metadata['code'] || r.metadata['source'] }}</span>
+            <span class="badge-pct">{{ scorePercent(r.score) }}%</span>
+          </div>
+          <div class="concept-desc" style="white-space:normal">{{ r.text }}</div>
+          <div class="concept-meta-row">
+            <span *ngIf="r.metadata['role']">Role: {{ r.metadata['role'] }}</span>
+            <span *ngIf="r.metadata['dataType']">Type: {{ r.metadata['dataType'] }}</span>
+            <span *ngIf="r.metadata['source']">Source: {{ r.metadata['source'] }}</span>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-left:14px" (click)="applyConcept(r, true)">Apply</button>
+      </div>
+    </div>
+  </div>
+</div>
