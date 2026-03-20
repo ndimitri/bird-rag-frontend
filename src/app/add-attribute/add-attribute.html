@@ -101,7 +101,7 @@
                 <div class="concept-name-row">
                   <span class="concept-name">{{ r.metadata['name'] || r.metadata['title'] }}</span>
                   <span class="badge badge-match">{{ r.metadata['code'] || r.metadata['source'] }}</span>
-                  <span class="badge-pct">{{ scorePercent(r.score) }}%</span>
+                  <span class="badge-pct" [ngClass]="scoreClass(r.score)">{{ scorePercent(r.score) }}%</span>
                 </div>
                 <div class="concept-desc">{{ r.text }}</div>
                 <div class="concept-meta" *ngIf="r.metadata['section']">
@@ -412,6 +412,16 @@
         <div class="spinner"></div>
         <span>Generating attribute from description…</span>
       </div>
+      <div class="alert alert-error fade-in" *ngIf="!isGenerating && generationError">
+        <span class="alert-icon">!</span>
+        <div>
+          <p class="alert-title">AI generation failed</p>
+          <p class="alert-text">{{ generationError }}</p>
+          <button class="btn btn-secondary btn-sm" style="margin-top:8px" (click)="retryGenerate()">
+            Retry generation
+          </button>
+        </div>
+      </div>
       <div *ngIf="!isGenerating && generatedData" class="fade-in">
         <p class="modal-hint">Based on your description, here's the generated attribute:</p>
         <div class="preview-card">
@@ -546,7 +556,7 @@
           <div class="concept-name-row">
             <span class="concept-name">{{ r.metadata['name'] || r.metadata['code'] }}</span>
             <span class="badge badge-match">{{ r.metadata['code'] || r.metadata['source'] }}</span>
-            <span class="badge-pct">{{ scorePercent(r.score) }}%</span>
+            <span class="badge-pct" [ngClass]="scoreClass(r.score)">{{ scorePercent(r.score) }}%</span>
           </div>
           <div class="concept-desc" style="white-space:normal">{{ r.text }}</div>
           <div class="concept-meta-row">

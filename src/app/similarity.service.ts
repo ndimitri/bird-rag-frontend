@@ -3,11 +3,16 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError } from 'rxjs/operators';
 import { SimilarityResult } from './models/similarity-result.model';
+import {
+  GenerateAttributeRequest,
+  GenerateAttributeResponse,
+} from './models/attribute.model';
 
 @Injectable({ providedIn: 'root' })
 export class SimilarityService {
   private readonly http = inject(HttpClient);
   private readonly apiUrl = 'http://localhost:8080/api/similarity/search';
+  private readonly aiGenerateUrl = 'http://localhost:8080/api/ai-generation/generate-attribute';
 
   search(query: string): Observable<SimilarityResult[]> {
     return this.http
@@ -18,6 +23,11 @@ export class SimilarityService {
           return of(this.fallbackData(query));
         })
       );
+  }
+
+  generateAttribute(partialDescription: string): Observable<GenerateAttributeResponse> {
+    const payload: GenerateAttributeRequest = { partialDescription };
+    return this.http.post<GenerateAttributeResponse>(this.aiGenerateUrl, payload);
   }
 
   private fallbackData(query: string): SimilarityResult[] {

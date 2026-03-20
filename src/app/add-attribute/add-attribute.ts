@@ -7,7 +7,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Subject, Subscription } from 'rxjs';
-import { debounceTime, distinctUntilChanged, switchMap } from 'rxjs/operators';
+import { debounceTime, distinctUntilChanged, finalize, switchMap } from 'rxjs/operators';
 
 import { SimilarityService } from '../similarity.service';
 import { SimilarityResult } from '../models/similarity-result.model';
@@ -17,6 +17,8 @@ import {
   FormData,
   GeneratedData,
   LegalReference,
+  AiGeneratedMetadata,
+  GenerateAttributeResponse,
 } from '../models/attribute.model';
 
 const DUMMY_LEGAL: LegalReference[] = [
@@ -66,6 +68,7 @@ export class AddAttributeComponent implements OnDestroy {
   showGenerateModal = false;
   isGenerating = false;
   generatedData: GeneratedData | null = null;
+  generationError: string | null = null;
   wizardStep: 'generate' | 'legal' = 'generate';
 
   legalQuery = '';
@@ -110,13 +113,34 @@ export class AddAttributeComponent implements OnDestroy {
   get remainingChars(): number { return Math.max(0, 10 - this.formData.genericDescription.length); }
   get shownResults(): SimilarityResult[] { return this.similarResults().slice(0, 3); }
   scorePercent(score: number): number { return Math.round(score * 100); }
+  scoreClass(score: number): string {
+    if (!Number.isFinite(score)) return 'score-unknown';
+    if (score < 0.3) return 'score-noise';
+    if (score < 0.45) return 'score-possible';
+    if (score < 0.6) return 'score-clear';
+    if (score < 0.8) return 'score-very-strong';
+    return 'score-suspicious';
+  }
 
   applyConcept(r: SimilarityResult, closeModal = false): void {
     const m = r.metadata;
     if (m['code']) this.formData.code = m['code'];
-    if (m['name']) this.formData.name = m['name'];
+    const conceptName = m['name'] ?? m['title'];
+    if (typeof conceptName === 'string' && conceptName.trim()) {
+      this.formData.name = conceptName.trim();
+    }
+    const maintenanceAgency = m['maintenance_agency'] ?? m['maintenanceAgency'];
+    if (typeof maintenanceAgency === 'string' && maintenanceAgency.trim()) {
+      this.formData.maintenanceAgency = maintenanceAgency.trim();
+    }
     if (r.text) this.formData.genericDescription = r.text;
-    if (m['role']) this.formData.role = m['role'];
+    const roleFromEntityType = this.mapEntityTypeToRole(m['entity_type']);
+    const normalizedRole = this.normalizeRole(m['role']);
+    if (roleFromEntityType) {
+      this.formData.role = roleFromEntityType;
+    } else if (normalizedRole) {
+      this.formData.role = normalizedRole;
+    }
     if (m['dataType']) this.formData.logicalDataType = m['dataType'];
     if (closeModal) this.showConceptModal = false;
   }
@@ -167,40 +191,183 @@ export class AddAttributeComponent implements OnDestroy {
   openGenerateModal(): void {
     this.wizardStep = 'generate';
     this.generatedData = null;
+    this.generationError = null;
     this.selectedLegalIds.set([]);
     this.showGenerateModal = true;
-    this.isGenerating = true;
-    setTimeout(() => {
-      this.generatedData = this.generateFromDescription(this.formData.genericDescription);
-      this.isGenerating = false;
-    }, 1400);
+    this.requestGeneratedAttribute();
   }
 
-  private generateFromDescription(desc: string): GeneratedData {
-    const d = desc.toLowerCase();
-    let code = 'ATTR_ITEM', name = 'Attribute Item', role = 'Attribute', dataType = 'String';
-    if (d.includes('email')) { code = 'EMAIL_ADDR'; name = 'Email Address'; }
-    else if (d.includes('phone')) { code = 'PHONE_NUM'; name = 'Phone Number'; }
-    else if (d.includes('date')) { code = 'DATE_VAL'; name = 'Date Value'; dataType = 'Date'; }
-    else if (d.includes('amount') || d.includes('price')) { code = 'AMT_VAL'; name = 'Amount Value'; dataType = 'Decimal'; role = 'Measure'; }
-    else if (d.includes('id') || d.includes('identifier')) { code = 'UNIQ_ID'; name = 'Unique Identifier'; role = 'Identifier'; }
-    else if (d.includes('country')) { code = 'CNTRY_CD'; name = 'Country Code'; role = 'Dimension'; }
-    else {
-      const words = desc.trim().split(' ').slice(0, 3);
-      code = words.map(w => w.substring(0, 4).toUpperCase()).join('_');
-      name = words.join(' ');
+  retryGenerate(): void {
+    this.generatedData = null;
+    this.generationError = null;
+    this.requestGeneratedAttribute();
+  }
+
+  private requestGeneratedAttribute(): void {
+    const description = this.formData.genericDescription.trim();
+    if (!description) {
+      this.generationError = 'Please provide a description before generating.';
+      return;
     }
-    return { code, name, description: desc, role, dataType };
+
+    this.isGenerating = true;
+    const requestSub = this.similarityService
+      .generateAttribute(description)
+      .pipe(finalize(() => { this.isGenerating = false; }))
+      .subscribe({
+        next: (response) => {
+          this.generatedData = this.mapGeneratedData(response, description);
+        },
+        error: (err: unknown) => {
+          console.error('AI generation failed', err);
+          this.generationError = 'Unable to generate attribute from AI service. Please try again.';
+        },
+      });
+
+    this.sub.add(requestSub);
+  }
+
+  private mapGeneratedData(response: GenerateAttributeResponse, description: string): GeneratedData {
+    const metadata = response?.metadata ?? {};
+    const code = this.pickFirstString(metadata, ['code', 'id']) ?? this.fallbackCode(description);
+    const name = this.pickFirstString(metadata, ['title', 'name']) ?? this.fallbackName(description);
+    const generatedDescription = this.pickFirstString(metadata, ['description']) ?? description;
+    const role =
+      this.mapEntityTypeToRole(this.pickFirstString(metadata, ['entity_type', 'entityType'])) ??
+      this.normalizeRole(this.pickFirstString(metadata, ['role'])) ??
+      'Attribute';
+    const dataType = this.pickFirstString(metadata, ['logical_data_type', 'logicalDataType', 'data_type', 'dataType', 'value_type', 'type']) ?? 'String';
+    const maintenanceAgency = this.pickFirstString(metadata, ['maintenance_agency', 'maintenanceAgency']);
+    const subdomainCode = this.pickFirstString(metadata, ['domain_id', 'subdomain_code', 'subdomainCode']);
+    const subdomainName = this.pickFirstString(metadata, ['domain_name', 'domainName', 'subdomain_name', 'subdomainName']);
+    const subdomainDescription = this.pickFirstString(metadata, ['domain_description', 'domainDescription', 'subdomain_description', 'subdomainDescription']);
+    const subdomainValueType = this.pickFirstString(metadata, ['value_type', 'subdomain_value_type', 'subdomainValueType']);
+    const enumerated = this.pickFirstBoolean(metadata, ['enumerated', 'is_enumerated', 'isEnumerated']);
+
+    return {
+      code,
+      name,
+      description: generatedDescription,
+      role,
+      dataType,
+      maintenanceAgency,
+      subdomainCode,
+      subdomainName,
+      subdomainDescription,
+      subdomainValueType,
+      enumerated,
+    };
+  }
+
+  private pickFirstString(metadata: AiGeneratedMetadata, keys: string[]): string | undefined {
+    for (const key of keys) {
+      const value = metadata[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return undefined;
+  }
+
+  private pickFirstBoolean(metadata: AiGeneratedMetadata, keys: string[]): boolean | undefined {
+    for (const key of keys) {
+      const value = metadata[key];
+      if (typeof value === 'boolean') {
+        return value;
+      }
+    }
+    return undefined;
+  }
+
+  private mapEntityTypeToRole(entityType: unknown): string | undefined {
+    if (typeof entityType !== 'string' || !entityType.trim()) {
+      return undefined;
+    }
+
+    const normalized = entityType
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replaceAll(/[\u0300-\u036f]/g, '')
+      .replaceAll(/[_-]/g, ' ');
+
+    if (normalized === 'variable' || normalized === 'attribut' || normalized === 'attribute') {
+      return 'Attribute';
+    }
+
+    return this.normalizeRole(entityType);
+  }
+
+  private normalizeRole(role: unknown): string | undefined {
+    if (typeof role !== 'string' || !role.trim()) {
+      return undefined;
+    }
+
+    const normalized = role.trim().toLowerCase();
+    const roleMap: Record<string, string> = {
+      attribute: 'Attribute',
+      attribut: 'Attribute',
+      variable: 'Attribute',
+      identifier: 'Identifier',
+      measure: 'Measure',
+      dimension: 'Dimension',
+    };
+
+    return roleMap[normalized];
+  }
+
+  private fallbackCode(desc: string): string {
+    const tokens = desc
+      .trim()
+      .split(/\s+/)
+      .slice(0, 4)
+      .map((word) => word.replaceAll(/[^a-zA-Z0-9]/g, '').toUpperCase())
+      .filter((word) => word.length > 0)
+      .map((word) => word.slice(0, 6));
+
+    return tokens.length > 0 ? tokens.join('_') : 'ATTR_ITEM';
+  }
+
+  private fallbackName(desc: string): string {
+    const cleaned = desc.trim();
+    if (!cleaned) {
+      return 'Attribute Item';
+    }
+
+    return cleaned
+      .split(/\s+/)
+      .slice(0, 5)
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
   }
 
   applyGenerated(): void {
     if (!this.generatedData) return;
     this.formData.code = this.generatedData.code;
     this.formData.name = this.generatedData.name;
+    this.formData.genericDescription = this.generatedData.description;
     this.formData.role = this.generatedData.role;
     this.formData.logicalDataType = this.generatedData.dataType;
+    if (this.generatedData.maintenanceAgency) {
+      this.formData.maintenanceAgency = this.generatedData.maintenanceAgency;
+    }
+    if (this.generatedData.subdomainCode) {
+      this.formData.subdomainCode = this.generatedData.subdomainCode;
+    }
+    if (this.generatedData.subdomainName) {
+      this.formData.subdomainName = this.generatedData.subdomainName;
+    }
+    if (this.generatedData.subdomainDescription) {
+      this.formData.subdomainDescription = this.generatedData.subdomainDescription;
+    }
+    if (this.generatedData.subdomainValueType) {
+      this.formData.subdomainValueType = this.generatedData.subdomainValueType;
+    }
+    if (typeof this.generatedData.enumerated === 'boolean') {
+      this.formData.enumerated = this.generatedData.enumerated;
+    }
     const newRefs = this.allLegal.filter(r => this.selectedLegalIds().includes(r.id));
-    newRefs.forEach(r => { if (!this.linkedRefs.find(lr => lr.id === r.id)) this.linkedRefs.push(r); });
+    newRefs.forEach(r => { if (!this.linkedRefs.some(lr => lr.id === r.id)) this.linkedRefs.push(r); });
     this.showGenerateModal = false;
   }
 

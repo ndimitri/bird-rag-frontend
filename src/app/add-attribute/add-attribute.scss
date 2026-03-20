@@ -13,6 +13,8 @@
   --text-dim: #3d4d72;
   --amber: #f59e0b;
   --amber-bg: rgba(245, 158, 11, 0.08);
+  --red: #ef4444;
+  --red-bg: rgba(239, 68, 68, 0.08);
   --green: #10b981;
   --radius: 10px;
   --radius-sm: 6px;
@@ -309,6 +311,42 @@ select {
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 20px;
+
+  &.score-noise {
+    background: #991b1b;
+    color: #ffffff;
+    border-color: #b91c1c;
+  }
+
+  &.score-possible {
+    background: #9a3412;
+    color: #ffffff;
+    border-color: #c2410c;
+  }
+
+  &.score-clear {
+    background: #065f46;
+    color: #ffffff;
+    border-color: #047857;
+  }
+
+  &.score-very-strong {
+    background: #075985;
+    color: #ffffff;
+    border-color: #0369a1;
+  }
+
+  &.score-suspicious {
+    background: #5b21b6;
+    color: #ffffff;
+    border-color: #6d28d9;
+  }
+
+  &.score-unknown {
+    background: rgba(107, 120, 153, 0.14);
+    color: var(--text-muted);
+    border-color: rgba(107, 120, 153, 0.3);
+  }
 }
 
 .badge-source {
@@ -357,6 +395,7 @@ select {
 
 // ─── Similar concepts ─────────────────────────────────────────────────────────
 .similar-section { margin-top: 14px; }
+
 
 .similar-header {
   display: flex;
@@ -632,6 +671,15 @@ select {
   &-amber {
     background: var(--amber-bg);
     border: 1px solid rgba(245, 158, 11, 0.2);
+  }
+
+  &-error {
+    background: var(--red-bg);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+
+    .alert-title {
+      color: var(--red);
+    }
   }
 
   &-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }

@@ -41,4 +41,22 @@ export interface GeneratedData {
   description: string;
   role: string;
   dataType: string;
+  maintenanceAgency?: string;
+  subdomainCode?: string;
+  subdomainName?: string;
+  subdomainDescription?: string;
+  subdomainValueType?: string;
+  enumerated?: boolean;
+}
+
+export interface GenerateAttributeRequest {
+  partialDescription: string;
+}
+
+export interface AiGeneratedMetadata {
+  [key: string]: string | number | boolean | null | undefined;
+}
+
+export interface GenerateAttributeResponse {
+  metadata: AiGeneratedMetadata;
 }
