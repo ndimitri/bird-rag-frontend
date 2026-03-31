@@ -79,6 +79,10 @@ export class AddAttributeComponent implements OnDestroy {
   linkedRefs: LegalReference[] = [];
 
   showConceptModal = false;
+  similarityFilters: Array<{ key: string; value: string }> = [];
+  filterKeyOptions = ['CODE', 'MAINTENANCE_AGENCY_ID', 'DOMAIN_ID', 'NAME'];
+  newSimilarityFilterKey = '';
+  newSimilarityFilterValue = '';
 
   constructor() {
     this.sub.add(
@@ -88,7 +92,7 @@ export class AddAttributeComponent implements OnDestroy {
           distinctUntilChanged(),
           switchMap((query) => {
             this.isLoadingSimilar.set(true);
-            return this.similarityService.search(query);
+            return this.similarityService.search(query, this.buildSimilarityFilters());
           })
         )
         .subscribe((results) => {
@@ -129,7 +133,7 @@ export class AddAttributeComponent implements OnDestroy {
     if (typeof conceptName === 'string' && conceptName.trim()) {
       this.formData.name = conceptName.trim();
     }
-    const maintenanceAgency = m['maintenance_agency'] ?? m['maintenanceAgency'];
+    const maintenanceAgency = m['maintenance_agency'] ?? m['maintenanceAgency'] ?? m['maintenanceAgencyId'];
     if (typeof maintenanceAgency === 'string' && maintenanceAgency.trim()) {
       this.formData.maintenanceAgency = maintenanceAgency.trim();
     }
@@ -143,6 +147,49 @@ export class AddAttributeComponent implements OnDestroy {
     }
     if (m['dataType']) this.formData.logicalDataType = m['dataType'];
     if (closeModal) this.showConceptModal = false;
+  }
+
+  addSimilarityFilter(): void {
+    const key = this.newSimilarityFilterKey.trim().toUpperCase();
+    const value = this.newSimilarityFilterValue.trim();
+
+    if (!key || !value) {
+      return;
+    }
+
+    const existingIndex = this.similarityFilters.findIndex((f) => f.key === key);
+    if (existingIndex >= 0) {
+      this.similarityFilters[existingIndex] = { key, value };
+    } else {
+      this.similarityFilters.push({ key, value });
+    }
+
+    this.newSimilarityFilterValue = '';
+    this.triggerSimilaritySearch();
+  }
+
+  removeSimilarityFilter(key: string): void {
+    this.similarityFilters = this.similarityFilters.filter((f) => f.key !== key);
+    this.triggerSimilaritySearch();
+  }
+
+  private triggerSimilaritySearch(): void {
+    const description = this.formData.genericDescription.trim();
+    if (description.length >= 10) {
+      this.isLoadingSimilar.set(true);
+      const requestSub = this.similarityService
+        .search(description, this.buildSimilarityFilters())
+        .pipe(finalize(() => this.isLoadingSimilar.set(false)))
+        .subscribe((results) => {
+          this.similarResults.set(results);
+        });
+
+      this.sub.add(requestSub);
+      return;
+    }
+
+    this.similarResults.set([]);
+    this.isLoadingSimilar.set(false);
   }
 
   addConstraint(): void {
@@ -277,6 +324,20 @@ export class AddAttributeComponent implements OnDestroy {
       }
     }
     return undefined;
+  }
+
+  private buildSimilarityFilters(): Record<string, string> | undefined {
+    const filters: Record<string, string> = {};
+
+    for (const filter of this.similarityFilters) {
+      const key = filter.key.trim().toUpperCase();
+      const value = filter.value.trim();
+      if (key && value) {
+        filters[key] = value;
+      }
+    }
+
+    return Object.keys(filters).length > 0 ? filters : undefined;
   }
 
   private mapEntityTypeToRole(entityType: unknown): string | undefined {

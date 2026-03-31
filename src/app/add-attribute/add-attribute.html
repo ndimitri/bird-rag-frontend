@@ -77,8 +77,43 @@
           </button>
         </div>
 
+        <div class="similarity-filters">
+          <p class="filters-title">Similarity filters (optional)</p>
+          <div class="filter-builder-row">
+            <select [(ngModel)]="newSimilarityFilterKey">
+              <option value="">Filter key...</option>
+              <option *ngFor="let key of filterKeyOptions" [value]="key">{{ key }}</option>
+            </select>
+            <input
+              type="text"
+              [(ngModel)]="newSimilarityFilterValue"
+              placeholder="Filter value..."
+              (keydown.enter)="addSimilarityFilter()"
+            />
+            <button class="btn btn-secondary btn-sm" type="button" (click)="addSimilarityFilter()">
+              Add filter
+            </button>
+          </div>
+
+          <p class="filters-title" *ngIf="remainingChars > 0">
+            Similarity search starts at 10 characters ({{ remainingChars }} missing).
+          </p>
+
+          <div class="active-filters" *ngIf="similarityFilters.length > 0">
+            <div class="active-filter" *ngFor="let f of similarityFilters">
+              <span>{{ f.key }}: {{ f.value }}</span>
+              <button class="btn-icon sm" type="button" (click)="removeSimilarityFilter(f.key)">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Similar results -->
         <div class="similar-section" *ngIf="aiActive()">
+
           <div class="similar-header" *ngIf="!isLoadingSimilar() && similarResults().length > 0">
             <p>Similar existing concepts found:</p>
             <button class="btn-link" (click)="showConceptModal = true">
