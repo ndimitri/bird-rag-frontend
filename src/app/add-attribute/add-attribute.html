@@ -79,15 +79,25 @@
 
         <div class="similarity-filters">
           <p class="filters-title">Similarity filters (optional)</p>
-          <div class="filter-builder-row">
+          <div class="filter-builder-row" [class.date-mode]="isDateFilterKey(newSimilarityFilterKey)">
             <select [(ngModel)]="newSimilarityFilterKey">
               <option value="">Filter key...</option>
-              <option *ngFor="let key of filterKeyOptions" [value]="key">{{ key }}</option>
+              <option *ngFor="let key of filterKeyOptions" [value]="key.key">{{ key.label }}</option>
             </select>
             <input
+              *ngIf="!isDateFilterKey(newSimilarityFilterKey)"
               type="text"
               [(ngModel)]="newSimilarityFilterValue"
               placeholder="Filter value..."
+              (keydown.enter)="addSimilarityFilter()"
+            />
+            <select *ngIf="isDateFilterKey(newSimilarityFilterKey)" [(ngModel)]="newSimilarityDateOperator">
+              <option *ngFor="let op of dateFilterOperators" [value]="op">{{ op }}</option>
+            </select>
+            <input
+              *ngIf="isDateFilterKey(newSimilarityFilterKey)"
+              type="date"
+              [(ngModel)]="newSimilarityFilterDate"
               (keydown.enter)="addSimilarityFilter()"
             />
             <button class="btn btn-secondary btn-sm" type="button" (click)="addSimilarityFilter()">
@@ -101,7 +111,7 @@
 
           <div class="active-filters" *ngIf="similarityFilters.length > 0">
             <div class="active-filter" *ngFor="let f of similarityFilters">
-              <span>{{ f.key }}: {{ f.value }}</span>
+              <span>{{ f.key }}: {{ f.displayValue }}</span>
               <button class="btn-icon sm" type="button" (click)="removeSimilarityFilter(f.key)">
                 <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M18 6L6 18M6 6l12 12"/>

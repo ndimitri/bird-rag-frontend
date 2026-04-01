@@ -190,6 +190,7 @@ h1 {
 
 input[type='text'],
 input[type='number'],
+input[type='date'],
 textarea,
 select {
   background: var(--bg);
@@ -416,6 +417,10 @@ select {
   grid-template-columns: minmax(170px, 1fr) minmax(170px, 1fr) auto;
   gap: 8px;
   align-items: center;
+
+  &.date-mode {
+    grid-template-columns: minmax(170px, 1fr) 90px minmax(170px, 1fr) auto;
+  }
 }
 
 .active-filters {

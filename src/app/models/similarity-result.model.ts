@@ -1,6 +1,6 @@
 export interface SimilaritySearchFilterRequest {
   query: string;
-  filters?: Record<string, string>;
+  filters?: Record<string, string | number>;
 }
 
 export interface SimilaritySearchFilterApiResult {

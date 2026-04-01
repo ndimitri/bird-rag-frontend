@@ -18,7 +18,7 @@ export class SimilarityService {
   private readonly apiUrl = 'http://localhost:8080/api/similarity/search/filter';
   private readonly aiGenerateUrl = 'http://localhost:8080/api/ai-generation/generate-attribute';
 
-  search(query: string, filters?: Record<string, string>): Observable<SimilarityResult[]> {
+  search(query: string, filters?: Record<string, string | number>): Observable<SimilarityResult[]> {
     const hasFilters = !!filters && Object.keys(filters).length > 0;
     const payload: SimilaritySearchFilterRequest = hasFilters
       ? { query, filters }

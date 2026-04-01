@@ -27,6 +27,20 @@ const DUMMY_LEGAL: LegalReference[] = [
   { id: 'mifid-25', title: 'MiFID II Article 25 - Client Assessment', source: 'MiFID II', snippet: 'Investment firms shall ensure and demonstrate to competent authorities that natural persons giving investment advice...', confidence: 68, keywords: ['client data', 'assessment', 'suitability'] },
 ];
 
+type SimilarityDateOperator = '<' | '>' | '=' | '>=' | '<=';
+
+interface SimilarityFilterOption {
+  key: string;
+  label: string;
+  kind: 'text' | 'date';
+}
+
+interface SimilarityFilterItem {
+  key: string;
+  value: string | number;
+  displayValue: string;
+}
+
 @Component({
   selector: 'app-add-attribute',
   standalone: true,
@@ -79,10 +93,20 @@ export class AddAttributeComponent implements OnDestroy {
   linkedRefs: LegalReference[] = [];
 
   showConceptModal = false;
-  similarityFilters: Array<{ key: string; value: string }> = [];
-  filterKeyOptions = ['CODE', 'MAINTENANCE_AGENCY_ID', 'DOMAIN_ID', 'NAME'];
+  similarityFilters: SimilarityFilterItem[] = [];
+  filterKeyOptions: SimilarityFilterOption[] = [
+    { key: 'CODE', label: 'Code', kind: 'text' },
+    { key: 'MAINTENANCE_AGENCY_ID', label: 'Maintenance agency', kind: 'text' },
+    { key: 'DOMAIN_ID', label: 'Domain', kind: 'text' },
+    { key: 'NAME', label: 'Name', kind: 'text' },
+    { key: 'VALID_FROM_UNIX', label: 'Valid from (date)', kind: 'date' },
+    { key: 'VALID_TO_UNIX', label: 'Valid to (date)', kind: 'date' },
+  ];
+  dateFilterOperators: SimilarityDateOperator[] = ['<', '>', '=', '>=', '<='];
   newSimilarityFilterKey = '';
   newSimilarityFilterValue = '';
+  newSimilarityFilterDate = '';
+  newSimilarityDateOperator: SimilarityDateOperator = '>=';
 
   constructor() {
     this.sub.add(
@@ -149,22 +173,49 @@ export class AddAttributeComponent implements OnDestroy {
     if (closeModal) this.showConceptModal = false;
   }
 
+  isDateFilterKey(key: string): boolean {
+    const normalized = key.trim().toUpperCase();
+    return normalized === 'VALID_FROM_UNIX' || normalized === 'VALID_TO_UNIX';
+  }
+
   addSimilarityFilter(): void {
     const key = this.newSimilarityFilterKey.trim().toUpperCase();
-    const value = this.newSimilarityFilterValue.trim();
-
-    if (!key || !value) {
+    if (!key) {
       return;
+    }
+
+    let filterValue: string | number;
+    let displayValue = '';
+
+    if (this.isDateFilterKey(key)) {
+      const date = this.newSimilarityFilterDate.trim();
+      const operator = this.newSimilarityDateOperator;
+      const unixTimestamp = this.dateToUnixTimestamp(date);
+      if (!date || unixTimestamp === null) {
+        return;
+      }
+
+      filterValue = operator === '=' ? unixTimestamp : `${operator}${unixTimestamp}`;
+      displayValue = `${operator} ${date}`;
+    } else {
+      const value = this.newSimilarityFilterValue.trim();
+      if (!value) {
+        return;
+      }
+
+      filterValue = value;
+      displayValue = value;
     }
 
     const existingIndex = this.similarityFilters.findIndex((f) => f.key === key);
     if (existingIndex >= 0) {
-      this.similarityFilters[existingIndex] = { key, value };
+      this.similarityFilters[existingIndex] = { key, value: filterValue, displayValue };
     } else {
-      this.similarityFilters.push({ key, value });
+      this.similarityFilters.push({ key, value: filterValue, displayValue });
     }
 
     this.newSimilarityFilterValue = '';
+    this.newSimilarityFilterDate = '';
     this.triggerSimilaritySearch();
   }
 
@@ -326,18 +377,39 @@ export class AddAttributeComponent implements OnDestroy {
     return undefined;
   }
 
-  private buildSimilarityFilters(): Record<string, string> | undefined {
-    const filters: Record<string, string> = {};
+  private buildSimilarityFilters(): Record<string, string | number> | undefined {
+    const filters: Record<string, string | number> = {};
 
     for (const filter of this.similarityFilters) {
       const key = filter.key.trim().toUpperCase();
-      const value = filter.value.trim();
-      if (key && value) {
+      const value = filter.value;
+      const hasStringValue = typeof value === 'string' && value.trim().length > 0;
+      const hasNumberValue = typeof value === 'number' && Number.isFinite(value);
+
+      if (key && (hasStringValue || hasNumberValue)) {
         filters[key] = value;
       }
     }
 
     return Object.keys(filters).length > 0 ? filters : undefined;
+  }
+
+  private dateToUnixTimestamp(dateValue: string): number | null {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateValue);
+    if (!match) {
+      return null;
+    }
+
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+      return null;
+    }
+
+    const unixSeconds = Math.floor(Date.UTC(year, month - 1, day) / 1000);
+    return Number.isFinite(unixSeconds) ? unixSeconds : null;
   }
 
   private mapEntityTypeToRole(entityType: unknown): string | undefined {
@@ -462,3 +534,4 @@ export class AddAttributeComponent implements OnDestroy {
   isLegalSelected(id: string): boolean { return this.selectedLegalIds().includes(id); }
   linkAndContinue(): void { this.wizardStep = 'generate'; }
 }
+
