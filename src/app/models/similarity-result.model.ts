@@ -9,7 +9,47 @@ export interface SimilaritySearchFilterApiResult {
   description: string;
   domainId?: string;
   maintenanceAgencyId?: string;
+  validFrom?: string;
+  validTo?: string;
+  validFromUnix?: number;
+  validToUnix?: number;
   score: number;
+}
+
+export interface LegalDocumentSearchFilterRequest {
+  query: string;
+  filters?: Record<string, string | number>;
+}
+
+export interface LegalDocumentSearchApiResult {
+  title: string;
+  text: string;
+  s3Uri: string;
+  score: number;
+  entityType?: string;
+  documentType?: string;
+  regulation?: string;
+  article?: string;
+  attachedVariable?: string;
+  jurisdiction?: string;
+  validFrom?: string;
+  sourceUrl?: string;
+}
+
+export interface LegalDocumentResult {
+  id: string;
+  title: string;
+  text: string;
+  s3Uri: string;
+  score: number;
+  entityType?: string;
+  documentType?: string;
+  regulation?: string;
+  article?: string;
+  attachedVariable?: string;
+  jurisdiction?: string;
+  validFrom?: string;
+  sourceUrl?: string;
 }
 
 export interface SimilarityResult {

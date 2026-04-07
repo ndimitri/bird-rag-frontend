@@ -6,7 +6,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Subject, Subscription } from 'rxjs';
+import { Subject, Subscription, of } from 'rxjs';
 import { debounceTime, distinctUntilChanged, finalize, switchMap } from 'rxjs/operators';
 
 import { SimilarityService } from '../similarity.service';
@@ -16,18 +16,24 @@ import {
   DomainMember,
   FormData,
   GeneratedData,
-  LegalReference,
   AiGeneratedMetadata,
   GenerateAttributeResponse,
 } from '../models/attribute.model';
-
-const DUMMY_LEGAL: LegalReference[] = [
-  { id: 'gdpr-6', title: 'GDPR Article 6 - Lawfulness of Processing', source: 'GDPR', snippet: 'Processing shall be lawful only if and to the extent that at least one of the following applies...', confidence: 95, keywords: ['personal data', 'consent', 'legitimate interest'] },
-  { id: 'gdpr-17', title: 'GDPR Article 17 - Right to Erasure', source: 'GDPR', snippet: 'The data subject shall have the right to obtain from the controller the erasure of personal data...', confidence: 82, keywords: ['erasure', 'deletion', 'right to be forgotten'] },
-  { id: 'mifid-25', title: 'MiFID II Article 25 - Client Assessment', source: 'MiFID II', snippet: 'Investment firms shall ensure and demonstrate to competent authorities that natural persons giving investment advice...', confidence: 68, keywords: ['client data', 'assessment', 'suitability'] },
-];
+import { LegalDocumentResult } from '../models/similarity-result.model';
 
 type SimilarityDateOperator = '<' | '>' | '=' | '>=' | '<=';
+
+interface LegalFilterOption {
+  key: string;
+  label: string;
+  kind: 'text';
+}
+
+interface LegalFilterItem {
+  key: string;
+  value: string | number;
+  displayValue: string;
+}
 
 interface SimilarityFilterOption {
   key: string;
@@ -51,7 +57,9 @@ interface SimilarityFilterItem {
 export class AddAttributeComponent implements OnDestroy {
   private readonly similarityService = inject(SimilarityService);
   private readonly descSearch$ = new Subject<string>();
+  private readonly legalSearch$ = new Subject<void>();
   private readonly sub = new Subscription();
+  private toastTimer: ReturnType<typeof setTimeout> | null = null;
 
   formData: FormData = {
     maintenanceAgency: 'SDD team (ECB)',
@@ -84,13 +92,29 @@ export class AddAttributeComponent implements OnDestroy {
   generatedData: GeneratedData | null = null;
   generationError: string | null = null;
   wizardStep: 'generate' | 'legal' = 'generate';
+  legalOrigin: 'generate' | 'form' = 'generate';
 
   legalQuery = '';
-  legalFilter = 'all';
-  allLegal = DUMMY_LEGAL;
-  filteredLegal = signal<LegalReference[]>(DUMMY_LEGAL);
+  allLegal: LegalDocumentResult[] = [];
+  filteredLegal = signal<LegalDocumentResult[]>([]);
   selectedLegalIds = signal<string[]>([]);
-  linkedRefs: LegalReference[] = [];
+  linkedRefs: LegalDocumentResult[] = [];
+  isLoadingLegalDocuments = signal(false);
+  toastVisible = signal(false);
+  toastMessage = signal('');
+  legalFilters: LegalFilterItem[] = [];
+  legalFilterKeyOptions: LegalFilterOption[] = [
+    { key: 'article', label: 'Article', kind: 'text' },
+    { key: 'document_type', label: 'Document type', kind: 'text' },
+    { key: 'regulation', label: 'Regulation', kind: 'text' },
+    { key: 'attached_variable', label: 'Attached variable', kind: 'text' },
+    { key: 'jurisdiction', label: 'Jurisdiction', kind: 'text' },
+    { key: 'entity_type', label: 'Entity type', kind: 'text' },
+    { key: 'source_url', label: 'Source URL', kind: 'text' },
+    { key: 'valid_from', label: 'Valid from', kind: 'text' },
+  ];
+  newLegalFilterKey = '';
+  newLegalFilterValue = '';
 
   showConceptModal = false;
   similarityFilters: SimilarityFilterItem[] = [];
@@ -124,9 +148,39 @@ export class AddAttributeComponent implements OnDestroy {
           this.isLoadingSimilar.set(false);
         })
     );
+
+    this.sub.add(
+      this.legalSearch$
+        .pipe(
+          debounceTime(450),
+          switchMap(() => {
+            const query = this.buildLegalQuery();
+            if (!query) {
+              this.allLegal = [];
+              this.filteredLegal.set([]);
+              this.isLoadingLegalDocuments.set(false);
+              return of([] as LegalDocumentResult[]);
+            }
+
+            this.isLoadingLegalDocuments.set(true);
+            return this.similarityService
+              .searchLegalDocuments(query, this.buildLegalFilters())
+              .pipe(finalize(() => this.isLoadingLegalDocuments.set(false)));
+          })
+        )
+        .subscribe((results) => {
+          this.allLegal = results;
+          this.filteredLegal.set(results);
+        })
+    );
   }
 
-  ngOnDestroy(): void { this.sub.unsubscribe(); }
+  ngOnDestroy(): void {
+    this.sub.unsubscribe();
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+    }
+  }
 
   onDescriptionChange(val: string): void {
     this.aiActive.set(val.length >= 10);
@@ -287,10 +341,18 @@ export class AddAttributeComponent implements OnDestroy {
   removeMember(id: number): void { this.members = this.members.filter(m => m.id !== id); }
 
   openGenerateModal(): void {
+    this.legalOrigin = 'generate';
     this.wizardStep = 'generate';
     this.generatedData = null;
     this.generationError = null;
     this.selectedLegalIds.set([]);
+    this.legalQuery = '';
+    this.legalFilters = [];
+    this.newLegalFilterKey = '';
+    this.newLegalFilterValue = '';
+    this.allLegal = [];
+    this.filteredLegal.set([]);
+    this.linkedRefs = [];
     this.showGenerateModal = true;
     this.requestGeneratedAttribute();
   }
@@ -315,6 +377,7 @@ export class AddAttributeComponent implements OnDestroy {
       .subscribe({
         next: (response) => {
           this.generatedData = this.mapGeneratedData(response, description);
+          this.prepareLegalSearch();
         },
         error: (err: unknown) => {
           console.error('AI generation failed', err);
@@ -499,39 +562,168 @@ export class AddAttributeComponent implements OnDestroy {
     if (typeof this.generatedData.enumerated === 'boolean') {
       this.formData.enumerated = this.generatedData.enumerated;
     }
-    const newRefs = this.allLegal.filter(r => this.selectedLegalIds().includes(r.id));
-    newRefs.forEach(r => { if (!this.linkedRefs.some(lr => lr.id === r.id)) this.linkedRefs.push(r); });
+    const linkedCount = this.attachSelectedLegalDocuments();
+    if (linkedCount > 0) {
+      this.showLinkToast(linkedCount);
+    }
     this.showGenerateModal = false;
   }
 
   removeLinkedRef(id: string): void { this.linkedRefs = this.linkedRefs.filter(r => r.id !== id); }
 
   goToLegal(): void {
-    this.legalQuery = this.formData.genericDescription.substring(0, 50);
+    this.legalOrigin = 'generate';
+    this.legalQuery = this.buildLegalQuery();
     this.wizardStep = 'legal';
-    this.filterLegal();
+    this.triggerLegalSearch();
   }
 
-  filterLegal(): void {
-    let results = this.allLegal;
-    if (this.legalFilter !== 'all') results = results.filter(r => r.source === this.legalFilter);
-    if (this.legalQuery) {
-      const q = this.legalQuery.toLowerCase();
-      results = results.filter(r =>
-        r.title.toLowerCase().includes(q) ||
-        r.snippet.toLowerCase().includes(q) ||
-        r.keywords.some(k => k.includes(q))
-      );
+  openLegalReferencesFromForm(): void {
+    this.legalOrigin = 'form';
+    this.selectedLegalIds.set([]);
+    this.wizardStep = 'legal';
+    this.showGenerateModal = true;
+    this.legalQuery = `${this.formData.name} ${this.formData.genericDescription}`.trim();
+    this.triggerLegalSearch();
+  }
+
+  onLegalQueryChange(value: string): void {
+    this.legalQuery = value;
+    this.triggerLegalSearch();
+  }
+
+  addLegalFilter(): void {
+    const key = this.newLegalFilterKey.trim();
+    const value = this.newLegalFilterValue.trim();
+
+    if (!key || !value) {
+      return;
     }
-    this.filteredLegal.set(results);
+
+    const existingIndex = this.legalFilters.findIndex((filter) => filter.key === key);
+    const nextFilter: LegalFilterItem = {
+      key,
+      value,
+      displayValue: value,
+    };
+
+    if (existingIndex >= 0) {
+      this.legalFilters[existingIndex] = nextFilter;
+    } else {
+      this.legalFilters.push(nextFilter);
+    }
+
+    this.newLegalFilterKey = '';
+    this.newLegalFilterValue = '';
+    this.triggerLegalSearch();
+  }
+
+  removeLegalFilter(key: string): void {
+    this.legalFilters = this.legalFilters.filter((filter) => filter.key !== key);
+    this.triggerLegalSearch();
   }
 
   toggleLegalRef(id: string): void {
+    if (this.isLegalAlreadyLinked(id)) {
+      return;
+    }
+
     const curr = this.selectedLegalIds();
     this.selectedLegalIds.set(curr.includes(id) ? curr.filter(x => x !== id) : [...curr, id]);
   }
 
   isLegalSelected(id: string): boolean { return this.selectedLegalIds().includes(id); }
-  linkAndContinue(): void { this.wizardStep = 'generate'; }
+
+  isLegalAlreadyLinked(id: string): boolean {
+    return this.linkedRefs.some((ref) => ref.id === id);
+  }
+
+  linkAndContinue(): void {
+    const linkedCount = this.attachSelectedLegalDocuments();
+    if (linkedCount > 0) {
+      this.showLinkToast(linkedCount);
+    }
+
+    if (this.legalOrigin === 'form') {
+      this.showGenerateModal = false;
+      return;
+    }
+
+    this.wizardStep = 'generate';
+  }
+
+  private prepareLegalSearch(): void {
+    const query = this.buildLegalQuery();
+    if (!query) {
+      return;
+    }
+
+    this.legalQuery = query;
+    this.triggerLegalSearch();
+  }
+
+  private triggerLegalSearch(): void {
+    this.legalSearch$.next();
+  }
+
+  private buildLegalQuery(): string {
+    const typedQuery = this.legalQuery.trim();
+    if (typedQuery.length > 0) {
+      return typedQuery;
+    }
+
+    const generatedName = this.generatedData?.name?.trim() ?? this.formData.name.trim();
+    const generatedDescription = this.generatedData?.description?.trim() ?? this.formData.genericDescription.trim();
+    return [generatedName, generatedDescription].filter((value) => value.length > 0).join(' ').trim();
+  }
+
+  private buildLegalFilters(): Record<string, string | number> | undefined {
+    const filters: Record<string, string | number> = {};
+
+    for (const filter of this.legalFilters) {
+      const key = filter.key.trim();
+      const value = filter.value;
+      const hasStringValue = typeof value === 'string' && value.trim().length > 0;
+      const hasNumberValue = typeof value === 'number' && Number.isFinite(value);
+
+      if (key && (hasStringValue || hasNumberValue)) {
+        filters[key] = value;
+      }
+    }
+
+    return Object.keys(filters).length > 0 ? filters : undefined;
+  }
+
+  private attachSelectedLegalDocuments(): number {
+    const selected = this.allLegal.filter(
+      (doc) => this.selectedLegalIds().includes(doc.id) && !this.isLegalAlreadyLinked(doc.id)
+    );
+
+    let linkedCount = 0;
+    for (const doc of selected) {
+      if (!this.linkedRefs.some((linked) => linked.id === doc.id)) {
+        this.linkedRefs.push(doc);
+        linkedCount += 1;
+      }
+    }
+
+    // Nettoie les sélections après liaison pour éviter les états incohérents dans la modale.
+    this.selectedLegalIds.set([]);
+    return linkedCount;
+  }
+
+  private showLinkToast(linkedCount: number): void {
+    const label = linkedCount > 1 ? 'references linked' : 'reference linked';
+    this.toastMessage.set(`${linkedCount} ${label}`);
+    this.toastVisible.set(true);
+
+    if (this.toastTimer) {
+      clearTimeout(this.toastTimer);
+    }
+
+    this.toastTimer = setTimeout(() => {
+      this.toastVisible.set(false);
+    }, 2500);
+  }
 }
 

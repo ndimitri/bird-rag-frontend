@@ -237,7 +237,7 @@
         </p>
         <div class="legal-ref-row" *ngFor="let ref of linkedRefs">
           <div class="legal-ref-left">
-            <span class="badge-source">{{ ref.source }}</span>
+            <span class="badge-source">{{ ref.regulation || ref.documentType || ref.entityType || 'Legal document' }}</span>
             <span class="legal-ref-title">{{ ref.title }}</span>
           </div>
           <button class="btn-icon sm" (click)="removeLinkedRef(ref.id)">
@@ -246,6 +246,12 @@
             </svg>
           </button>
         </div>
+      </div>
+
+      <div class="form-row single narrow" style="margin-top: 8px;">
+        <button class="btn btn-secondary" type="button" (click)="openLegalReferencesFromForm()">
+          Link references
+        </button>
       </div>
     </div>
   </div>
@@ -373,6 +379,10 @@
   </div>
 </div>
 
+<div class="toast-link" *ngIf="toastVisible()">
+  <span>{{ toastMessage() }}</span>
+</div>
+
 
 <!-- ════════════════ MODAL: ADD MEMBER ════════════════ -->
 <div class="modal-overlay" [class.open]="showMemberModal" (click)="showMemberModal = false">
@@ -496,13 +506,11 @@
           </div>
         </div>
 
-        <div class="preview-card" *ngIf="selectedLegalIds().length > 0" style="margin-top:12px">
-          <p class="inner-card-title" style="margin-bottom:8px">Linked Legal References ({{ selectedLegalIds().length }})</p>
-          <div *ngFor="let ref of allLegal">
-            <div class="legal-mini-row" *ngIf="isLegalSelected(ref.id)">
-              <span class="badge-source">{{ ref.source }}</span>
-              <span class="legal-ref-title">{{ ref.title }}</span>
-            </div>
+        <div class="preview-card" *ngIf="linkedRefs.length > 0" style="margin-top:12px">
+          <p class="inner-card-title" style="margin-bottom:8px">Linked Legal References ({{ linkedRefs.length }})</p>
+          <div class="legal-mini-row" *ngFor="let ref of linkedRefs">
+            <span class="badge-source">{{ ref.regulation || ref.documentType || ref.entityType || 'Legal document' }}</span>
+            <span class="legal-ref-title">{{ ref.title }}</span>
           </div>
         </div>
 
@@ -528,26 +536,67 @@
           <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
           </svg>
-          <input type="text" [(ngModel)]="legalQuery" placeholder="Search legal references…" (input)="filterLegal()" />
+          <input
+            type="text"
+            [(ngModel)]="legalQuery"
+            placeholder="Search legal references…"
+            (ngModelChange)="onLegalQueryChange($event)"
+          />
         </div>
-        <select [(ngModel)]="legalFilter" (change)="filterLegal()" style="width:130px">
-          <option value="all">All Sources</option>
-          <option value="GDPR">GDPR</option>
-          <option value="MiFID II">MiFID II</option>
-        </select>
+      </div>
+
+      <div class="similarity-filters legal-filters">
+        <p class="filters-title">Legal metadata filters (optional)</p>
+        <div class="filter-builder-row">
+          <select [(ngModel)]="newLegalFilterKey">
+            <option value="">Filter key…</option>
+            <option *ngFor="let key of legalFilterKeyOptions" [value]="key.key">{{ key.label }}</option>
+          </select>
+          <input
+            type="text"
+            [(ngModel)]="newLegalFilterValue"
+            placeholder="Filter value…"
+            (keydown.enter)="addLegalFilter()"
+          />
+          <button class="btn btn-secondary btn-sm" type="button" (click)="addLegalFilter()">Add filter</button>
+        </div>
+
+        <div class="active-filters" *ngIf="legalFilters.length > 0">
+          <div class="active-filter" *ngFor="let f of legalFilters">
+            <span>{{ f.key }}: {{ f.displayValue }}</span>
+            <button class="btn-icon sm" type="button" (click)="removeLegalFilter(f.key)">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="legal-scroll">
+        <div class="loading-row" *ngIf="isLoadingLegalDocuments()">
+          <div class="spinner"></div>
+          Finding legal documents…
+        </div>
+
         <div class="legal-card" *ngFor="let ref of filteredLegal()"
              [class.selected]="isLegalSelected(ref.id)"
+             [class.already-linked]="isLegalAlreadyLinked(ref.id)"
              (click)="toggleLegalRef(ref.id)">
           <div class="legal-card-top">
             <div>
               <div class="legal-card-badges">
-                <span class="badge-source">{{ ref.source }}</span>
-                <span class="badge-pct">{{ ref.confidence }}% match</span>
+                <span class="badge-source">{{ ref.regulation || ref.documentType || ref.entityType || 'Legal document' }}</span>
+                <span class="badge-pct" [ngClass]="scoreClass(ref.score)">{{ scorePercent(ref.score) }}% match</span>
+                <span class="badge badge-linked" *ngIf="isLegalAlreadyLinked(ref.id)">Already linked</span>
               </div>
               <p class="legal-card-title">{{ ref.title }}</p>
+              <div class="legal-card-meta-row">
+                <span *ngIf="ref.article">Article {{ ref.article }}</span>
+                <span *ngIf="ref.documentType">{{ ref.documentType }}</span>
+                <span *ngIf="ref.jurisdiction">{{ ref.jurisdiction }}</span>
+                <span *ngIf="ref.validFrom">Valid from {{ ref.validFrom }}</span>
+              </div>
             </div>
             <div class="check-circle" [class.checked]="isLegalSelected(ref.id)">
               <svg *ngIf="isLegalSelected(ref.id)" width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="white" stroke-width="2.5">
@@ -555,20 +604,33 @@
               </svg>
             </div>
           </div>
-          <p class="legal-card-snippet">{{ ref.snippet }}</p>
+          <p class="legal-card-snippet">{{ ref.text }}</p>
           <div class="kw-list">
-            <span class="kw-tag" *ngFor="let kw of ref.keywords">{{ kw }}</span>
+            <span class="kw-tag" *ngIf="ref.attachedVariable">Attached: {{ ref.attachedVariable }}</span>
+          </div>
+          <div class="legal-card-footer" *ngIf="ref.sourceUrl">
+            <a [href]="ref.sourceUrl" target="_blank" rel="noreferrer noopener" (click)="$event.stopPropagation()">
+              Open source document
+            </a>
           </div>
         </div>
+
+        <p class="no-results" *ngIf="!isLoadingLegalDocuments() && filteredLegal().length === 0">
+          No legal documents found for this attribute.
+        </p>
       </div>
 
-      <button class="btn btn-primary full" *ngIf="selectedLegalIds().length > 0" (click)="linkAndContinue()">
-        Link {{ selectedLegalIds().length }} Reference{{ selectedLegalIds().length > 1 ? 's' : '' }} &amp; Continue
-      </button>
     </div>
 
     <div class="modal-footer">
       <button class="btn btn-secondary" (click)="showGenerateModal = false">Cancel</button>
+      <button
+        class="btn btn-primary"
+        *ngIf="wizardStep === 'legal' && selectedLegalIds().length > 0"
+        (click)="linkAndContinue()"
+      >
+        Link {{ selectedLegalIds().length }} Reference{{ selectedLegalIds().length > 1 ? 's' : '' }}
+      </button>
       <button class="btn btn-primary" *ngIf="wizardStep === 'generate' && !isGenerating && generatedData"
               (click)="applyGenerated()">
         Apply to Form
