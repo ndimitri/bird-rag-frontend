@@ -579,7 +579,21 @@
           Finding legal documents…
         </div>
 
-        <div class="legal-card" *ngFor="let ref of filteredLegal()"
+        <div class="legal-list-header" *ngIf="!isLoadingLegalDocuments() && filteredLegal().length > 0">
+          <p>
+            Showing {{ shownLegalResults.length }} of {{ filteredLegal().length }} documents
+          </p>
+          <button
+            class="btn-link"
+            type="button"
+            *ngIf="hasMoreLegalResults || showAllLegalResults"
+            (click)="toggleLegalResultsExpansion()"
+          >
+            {{ showAllLegalResults ? 'Show less' : 'Show more' }}
+          </button>
+        </div>
+
+        <div class="legal-card" *ngFor="let ref of shownLegalResults"
              [class.selected]="isLegalSelected(ref.id)"
              [class.already-linked]="isLegalAlreadyLinked(ref.id)"
              (click)="toggleLegalRef(ref.id)">

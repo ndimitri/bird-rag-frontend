@@ -95,6 +95,8 @@ export class AddAttributeComponent implements OnDestroy {
   legalOrigin: 'generate' | 'form' = 'generate';
 
   legalQuery = '';
+  readonly legalResultsDisplayCount = 5;
+  showAllLegalResults = false;
   allLegal: LegalDocumentResult[] = [];
   filteredLegal = signal<LegalDocumentResult[]>([]);
   selectedLegalIds = signal<string[]>([]);
@@ -194,6 +196,13 @@ export class AddAttributeComponent implements OnDestroy {
 
   get remainingChars(): number { return Math.max(0, 10 - this.formData.genericDescription.length); }
   get shownResults(): SimilarityResult[] { return this.similarResults().slice(0, 3); }
+  get shownLegalResults(): LegalDocumentResult[] {
+    const results = this.filteredLegal();
+    return this.showAllLegalResults ? results : results.slice(0, this.legalResultsDisplayCount);
+  }
+  get hasMoreLegalResults(): boolean {
+    return this.filteredLegal().length > this.legalResultsDisplayCount;
+  }
   scorePercent(score: number): number { return Math.round(score * 100); }
   scoreClass(score: number): string {
     if (!Number.isFinite(score)) return 'score-unknown';
@@ -347,6 +356,7 @@ export class AddAttributeComponent implements OnDestroy {
     this.generationError = null;
     this.selectedLegalIds.set([]);
     this.legalQuery = '';
+    this.showAllLegalResults = false;
     this.legalFilters = [];
     this.newLegalFilterKey = '';
     this.newLegalFilterValue = '';
@@ -573,6 +583,7 @@ export class AddAttributeComponent implements OnDestroy {
 
   goToLegal(): void {
     this.legalOrigin = 'generate';
+    this.showAllLegalResults = false;
     this.legalQuery = this.buildLegalQuery();
     this.wizardStep = 'legal';
     this.triggerLegalSearch();
@@ -581,6 +592,7 @@ export class AddAttributeComponent implements OnDestroy {
   openLegalReferencesFromForm(): void {
     this.legalOrigin = 'form';
     this.selectedLegalIds.set([]);
+    this.showAllLegalResults = false;
     this.wizardStep = 'legal';
     this.showGenerateModal = true;
     this.legalQuery = `${this.formData.name} ${this.formData.genericDescription}`.trim();
@@ -589,6 +601,7 @@ export class AddAttributeComponent implements OnDestroy {
 
   onLegalQueryChange(value: string): void {
     this.legalQuery = value;
+    this.showAllLegalResults = false;
     this.triggerLegalSearch();
   }
 
@@ -615,12 +628,18 @@ export class AddAttributeComponent implements OnDestroy {
 
     this.newLegalFilterKey = '';
     this.newLegalFilterValue = '';
+    this.showAllLegalResults = false;
     this.triggerLegalSearch();
   }
 
   removeLegalFilter(key: string): void {
     this.legalFilters = this.legalFilters.filter((filter) => filter.key !== key);
+    this.showAllLegalResults = false;
     this.triggerLegalSearch();
+  }
+
+  toggleLegalResultsExpansion(): void {
+    this.showAllLegalResults = !this.showAllLegalResults;
   }
 
   toggleLegalRef(id: string): void {
