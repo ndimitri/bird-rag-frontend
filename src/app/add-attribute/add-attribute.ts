@@ -250,6 +250,21 @@ export class AddAttributeComponent implements OnDestroy {
     return (ref.chunks?.length ?? 0) > 1;
   }
 
+  canToggleLegalPreview(ref: LegalDocumentResult): boolean {
+    return this.hasLegalChunks(ref) || this.canExpandLegalExcerpt(ref);
+  }
+
+  legalPreviewToggleLabel(ref: LegalDocumentResult): string {
+    const expanded = this.isLegalExpanded(ref.id);
+    const plural = this.hasLegalChunks(ref);
+
+    if (expanded) {
+      return plural ? 'Masquer les extraits' : 'Masquer l\'extrait';
+    }
+
+    return plural ? 'Afficher les extraits' : 'Afficher l\'extrait';
+  }
+
   legalChunks(ref: LegalDocumentResult): NonNullable<LegalDocumentResult['chunks']> {
     return ref.chunks ?? [];
   }

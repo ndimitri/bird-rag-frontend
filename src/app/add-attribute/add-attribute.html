@@ -630,22 +630,22 @@
             </div>
           </div>
           <p class="legal-card-snippet">{{ ref.text }}</p>
-          <div class="legal-card-actions" *ngIf="hasLegalChunks(ref)">
+          <div class="legal-card-actions" *ngIf="canToggleLegalPreview(ref)">
             <button
               class="btn btn-ghost btn-sm legal-preview-toggle"
               type="button"
               [attr.aria-expanded]="isLegalExpanded(ref.id)"
               (click)="toggleLegalPreview(ref.id); $event.stopPropagation()"
             >
-              {{ isLegalExpanded(ref.id) ? 'Masquer les extraits' : 'Afficher les extraits' }}
+              {{ legalPreviewToggleLabel(ref) }}
             </button>
           </div>
-          <div class="legal-card-preview" *ngIf="isLegalExpanded(ref.id) && hasLegalChunks(ref)">
+          <div class="legal-card-preview" *ngIf="isLegalExpanded(ref.id)">
             <div class="legal-preview-toolbar">
               <div class="legal-preview-page-pill" *ngIf="legalChunkPageLabel(ref)">
                 {{ legalChunkPageLabel(ref) }}
               </div>
-              <div class="legal-preview-nav">
+              <div class="legal-preview-nav" *ngIf="hasLegalChunks(ref)">
                 <button class="btn-icon sm" type="button" (click)="previousLegalChunk(ref); $event.stopPropagation()" [disabled]="legalChunks(ref).length <= 1">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M15 18l-6-6 6-6"/>
@@ -675,7 +675,7 @@
               </button>
             </div>
 
-            <div class="legal-chunk-dots">
+            <div class="legal-chunk-dots" *ngIf="hasLegalChunks(ref)">
               <button
                 class="legal-chunk-dot"
                 *ngFor="let chunk of legalChunks(ref); let i = index"

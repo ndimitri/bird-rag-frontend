@@ -144,6 +144,7 @@ export class SimilarityService {
       const existingPages = this.normalizePages(existing.pageNumbers, existing.pageNumber);
       const itemPages = this.normalizePages(item.pageNumbers, item.pageNumber);
       const mergedPages = this.normalizePages([...existingPages, ...itemPages]);
+      const normalizedChunks = this.normalizeChunks(mergedChunks);
 
       const preferred = item.score > existing.score ? item : existing;
       byKey.set(key, {
@@ -152,19 +153,55 @@ export class SimilarityService {
         score: Math.max(existing.score, item.score),
         text: preferred.text || existing.text,
         pageNumber: preferred.pageNumber ?? existing.pageNumber,
-        chunks: mergedChunks.sort((a, b) => b.score - a.score),
+        chunks: normalizedChunks,
         pageNumbers: mergedPages,
-        chunkCount: mergedChunks.length,
+        chunkCount: normalizedChunks.length,
       });
     }
 
     return Array.from(byKey.values())
       .map((doc) => ({
         ...doc,
-        chunks: (doc.chunks ?? []).slice(0, 5),
+        chunks: this.normalizeChunks(doc.chunks ?? []),
         pageNumbers: this.normalizePages(doc.pageNumbers, doc.pageNumber),
+        chunkCount: this.normalizeChunks(doc.chunks ?? []).length,
       }))
       .sort((a, b) => b.score - a.score);
+  }
+
+  private normalizeChunks(chunks: LegalDocumentChunk[]): LegalDocumentChunk[] {
+    const byKey = new Map<string, LegalDocumentChunk>();
+
+    for (const chunk of chunks) {
+      const text = (chunk.text ?? '').trim();
+      const page = Number.isInteger(chunk.pageNumber) ? (chunk.pageNumber as number) : undefined;
+      const key = `${page ?? 'np'}|${text.toLowerCase()}`;
+      const existing = byKey.get(key);
+
+      if (!existing || (chunk.score ?? 0) > (existing.score ?? 0)) {
+        byKey.set(key, {
+          ...chunk,
+          text,
+          pageNumber: page,
+          score: chunk.score ?? 0,
+        });
+      }
+    }
+
+    return Array.from(byKey.values()).sort((a, b) => {
+      const aHasPage = Number.isInteger(a.pageNumber);
+      const bHasPage = Number.isInteger(b.pageNumber);
+
+      if (aHasPage && bHasPage && a.pageNumber !== b.pageNumber) {
+        return (a.pageNumber as number) - (b.pageNumber as number);
+      }
+
+      if (aHasPage !== bHasPage) {
+        return aHasPage ? -1 : 1;
+      }
+
+      return (b.score ?? 0) - (a.score ?? 0);
+    });
   }
 
   private normalizePages(pages?: number[], pageNumber?: number): number[] {
