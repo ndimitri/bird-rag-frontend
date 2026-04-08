@@ -34,6 +34,13 @@ export interface LegalDocumentSearchApiResult {
   jurisdiction?: string;
   validFrom?: string;
   sourceUrl?: string;
+  pageNumber?: number;
+}
+
+export interface LegalDocumentChunk {
+  text: string;
+  score: number;
+  pageNumber?: number;
 }
 
 export interface LegalDocumentResult {
@@ -50,6 +57,10 @@ export interface LegalDocumentResult {
   jurisdiction?: string;
   validFrom?: string;
   sourceUrl?: string;
+  pageNumber?: number;
+  pageNumbers?: number[];
+  chunkCount?: number;
+  chunks?: LegalDocumentChunk[];
 }
 
 export interface SimilarityResult {

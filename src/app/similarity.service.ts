@@ -3,6 +3,10 @@ import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import {
+  LegalDocumentChunk,
+  LegalDocumentResult,
+  LegalDocumentSearchApiResult,
+  LegalDocumentSearchFilterRequest,
   SimilarityResult,
   SimilaritySearchFilterApiResult,
   SimilaritySearchFilterRequest,
@@ -11,42 +15,6 @@ import {
   GenerateAttributeRequest,
   GenerateAttributeResponse,
 } from './models/attribute.model';
-
-interface LegalDocumentSearchFilterRequest {
-  query: string;
-  filters?: Record<string, string | number>;
-}
-
-interface LegalDocumentSearchApiResult {
-  title: string;
-  text: string;
-  s3Uri: string;
-  score: number;
-  entityType?: string;
-  documentType?: string;
-  regulation?: string;
-  article?: string;
-  attachedVariable?: string;
-  jurisdiction?: string;
-  validFrom?: string;
-  sourceUrl?: string;
-}
-
-interface LegalDocumentResult {
-  id: string;
-  title: string;
-  text: string;
-  s3Uri: string;
-  score: number;
-  entityType?: string;
-  documentType?: string;
-  regulation?: string;
-  article?: string;
-  attachedVariable?: string;
-  jurisdiction?: string;
-  validFrom?: string;
-  sourceUrl?: string;
-}
 
 @Injectable({ providedIn: 'root' })
 export class SimilarityService {
@@ -126,6 +94,16 @@ export class SimilarityService {
       jurisdiction: item.jurisdiction,
       validFrom: item.validFrom,
       sourceUrl: item.sourceUrl,
+      pageNumber: item.pageNumber,
+      pageNumbers: Number.isInteger(item.pageNumber) ? [item.pageNumber as number] : [],
+      chunkCount: 1,
+      chunks: [
+        {
+          text: item.text ?? '',
+          score: item.score ?? 0,
+          pageNumber: item.pageNumber,
+        },
+      ],
     };
   }
 
@@ -148,12 +126,55 @@ export class SimilarityService {
         .join('|');
 
       const existing = byKey.get(key);
-      if (!existing || item.score > existing.score) {
-        byKey.set(key, item);
+      if (!existing) {
+        byKey.set(key, {
+          ...item,
+          chunks: item.chunks ?? [],
+          pageNumbers: this.normalizePages(item.pageNumbers, item.pageNumber),
+          chunkCount: item.chunkCount ?? item.chunks?.length ?? 1,
+        });
+        continue;
       }
+
+      const mergedChunks: LegalDocumentChunk[] = [
+        ...(existing.chunks ?? []),
+        ...(item.chunks ?? []),
+      ];
+
+      const existingPages = this.normalizePages(existing.pageNumbers, existing.pageNumber);
+      const itemPages = this.normalizePages(item.pageNumbers, item.pageNumber);
+      const mergedPages = this.normalizePages([...existingPages, ...itemPages]);
+
+      const preferred = item.score > existing.score ? item : existing;
+      byKey.set(key, {
+        ...existing,
+        ...preferred,
+        score: Math.max(existing.score, item.score),
+        text: preferred.text || existing.text,
+        pageNumber: preferred.pageNumber ?? existing.pageNumber,
+        chunks: mergedChunks.sort((a, b) => b.score - a.score),
+        pageNumbers: mergedPages,
+        chunkCount: mergedChunks.length,
+      });
     }
 
-    return Array.from(byKey.values()).sort((a, b) => b.score - a.score);
+    return Array.from(byKey.values())
+      .map((doc) => ({
+        ...doc,
+        chunks: (doc.chunks ?? []).slice(0, 5),
+        pageNumbers: this.normalizePages(doc.pageNumbers, doc.pageNumber),
+      }))
+      .sort((a, b) => b.score - a.score);
+  }
+
+  private normalizePages(pages?: number[], pageNumber?: number): number[] {
+    const values = [...(pages ?? [])];
+
+    if (Number.isInteger(pageNumber)) {
+      values.push(pageNumber as number);
+    }
+
+    return [...new Set(values.filter((value) => Number.isInteger(value) && value > 0))].sort((a, b) => a - b);
   }
 
   private fallbackData(_query: string): SimilarityResult[] {

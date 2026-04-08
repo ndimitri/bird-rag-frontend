@@ -239,6 +239,9 @@
           <div class="legal-ref-left">
             <span class="badge-source">{{ ref.regulation || ref.documentType || ref.entityType || 'Legal document' }}</span>
             <span class="legal-ref-title">{{ ref.title }}</span>
+            <span class="legal-ref-meta" *ngIf="legalPagesLabel(ref) || legalChunksLabel(ref)">
+              {{ legalPagesLabel(ref) }}<ng-container *ngIf="legalPagesLabel(ref) && legalChunksLabel(ref)"> · </ng-container>{{ legalChunksLabel(ref) }}
+            </span>
           </div>
           <button class="btn-icon sm" (click)="removeLinkedRef(ref.id)">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -511,6 +514,9 @@
           <div class="legal-mini-row" *ngFor="let ref of linkedRefs">
             <span class="badge-source">{{ ref.regulation || ref.documentType || ref.entityType || 'Legal document' }}</span>
             <span class="legal-ref-title">{{ ref.title }}</span>
+            <span class="legal-ref-meta" *ngIf="legalPagesLabel(ref) || legalChunksLabel(ref)">
+              {{ legalPagesLabel(ref) }}<ng-container *ngIf="legalPagesLabel(ref) && legalChunksLabel(ref)"> · </ng-container>{{ legalChunksLabel(ref) }}
+            </span>
           </div>
         </div>
 
@@ -596,6 +602,7 @@
         <div class="legal-card" *ngFor="let ref of shownLegalResults"
              [class.selected]="isLegalSelected(ref.id)"
              [class.already-linked]="isLegalAlreadyLinked(ref.id)"
+             [class.expanded]="isLegalExpanded(ref.id)"
              (click)="toggleLegalRef(ref.id)">
           <div class="legal-card-top">
             <div>
@@ -603,6 +610,8 @@
                 <span class="badge-source">{{ ref.regulation || ref.documentType || ref.entityType || 'Legal document' }}</span>
                 <span class="badge-pct" [ngClass]="scoreClass(ref.score)">{{ scorePercent(ref.score) }}% match</span>
                 <span class="badge badge-linked" *ngIf="isLegalAlreadyLinked(ref.id)">Already linked</span>
+                <span class="badge badge-pages" *ngIf="legalPagesListLabel(ref)">{{ legalPagesListLabel(ref) }}</span>
+                <span class="badge badge-chunks" *ngIf="legalChunksLabel(ref)">{{ legalChunksLabel(ref) }}</span>
               </div>
               <p class="legal-card-title">{{ ref.title }}</p>
               <div class="legal-card-meta-row">
@@ -610,6 +619,8 @@
                 <span *ngIf="ref.documentType">{{ ref.documentType }}</span>
                 <span *ngIf="ref.jurisdiction">{{ ref.jurisdiction }}</span>
                 <span *ngIf="ref.validFrom">Valid from {{ ref.validFrom }}</span>
+                <span *ngIf="legalPagesLabel(ref)">{{ legalPagesLabel(ref) }}</span>
+                <span *ngIf="legalChunksLabel(ref)">{{ legalChunksLabel(ref) }}</span>
               </div>
             </div>
             <div class="check-circle" [class.checked]="isLegalSelected(ref.id)">
@@ -619,6 +630,63 @@
             </div>
           </div>
           <p class="legal-card-snippet">{{ ref.text }}</p>
+          <div class="legal-card-actions" *ngIf="hasLegalChunks(ref)">
+            <button
+              class="btn btn-ghost btn-sm legal-preview-toggle"
+              type="button"
+              [attr.aria-expanded]="isLegalExpanded(ref.id)"
+              (click)="toggleLegalPreview(ref.id); $event.stopPropagation()"
+            >
+              {{ isLegalExpanded(ref.id) ? 'Masquer les extraits' : 'Afficher les extraits' }}
+            </button>
+          </div>
+          <div class="legal-card-preview" *ngIf="isLegalExpanded(ref.id) && hasLegalChunks(ref)">
+            <div class="legal-preview-toolbar">
+              <div class="legal-preview-page-pill" *ngIf="legalChunkPageLabel(ref)">
+                {{ legalChunkPageLabel(ref) }}
+              </div>
+              <div class="legal-preview-nav">
+                <button class="btn-icon sm" type="button" (click)="previousLegalChunk(ref); $event.stopPropagation()" [disabled]="legalChunks(ref).length <= 1">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M15 18l-6-6 6-6"/>
+                  </svg>
+                </button>
+                <span class="legal-preview-counter">{{ activeLegalChunkIndex(ref) + 1 }} / {{ legalChunks(ref).length }}</span>
+                <button class="btn-icon sm" type="button" (click)="nextLegalChunk(ref); $event.stopPropagation()" [disabled]="legalChunks(ref).length <= 1">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 18l6-6-6-6"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="legal-preview-excerpt">
+              <p class="legal-preview-label">Aperçu de l’extrait actif</p>
+              <p class="legal-preview-text" [class.collapsed]="!isLegalExcerptExpanded(ref)">
+                {{ legalExcerptContent(ref) }}
+              </p>
+              <button
+                *ngIf="canExpandLegalExcerpt(ref)"
+                class="btn-link legal-preview-more"
+                type="button"
+                (click)="toggleLegalExcerpt(ref); $event.stopPropagation()"
+              >
+                {{ isLegalExcerptExpanded(ref) ? 'Voir moins' : 'Voir plus' }}
+              </button>
+            </div>
+
+            <div class="legal-chunk-dots">
+              <button
+                class="legal-chunk-dot"
+                *ngFor="let chunk of legalChunks(ref); let i = index"
+                type="button"
+                [class.active]="i === activeLegalChunkIndex(ref)"
+                (click)="setActiveLegalChunk(ref.id, i); $event.stopPropagation()"
+              >
+                <span class="legal-chunk-dot-page">{{ legalChunkPageLabel(ref, i) || (chunk.pageNumber ? ('p. ' + chunk.pageNumber) : ('Extrait ' + (i + 1))) }}</span>
+              </button>
+            </div>
+          </div>
           <div class="kw-list">
             <span class="kw-tag" *ngIf="ref.attachedVariable">Attached: {{ ref.attachedVariable }}</span>
           </div>

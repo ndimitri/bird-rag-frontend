@@ -368,6 +368,29 @@ select {
   white-space: nowrap;
 }
 
+.badge-pages,
+.badge-chunks {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.badge-pages {
+  background: rgba(79, 124, 255, 0.12);
+  color: #b9ccff;
+  border: 1px solid rgba(79, 124, 255, 0.22);
+}
+
+.badge-chunks {
+  background: rgba(16, 185, 129, 0.1);
+  color: #99f6e4;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
 // ─── AI Panel ─────────────────────────────────────────────────────────────────
 .desc-header {
   display: flex;
@@ -805,6 +828,7 @@ select {
 .legal-ref-left {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -816,9 +840,15 @@ select {
 .legal-mini-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 12.5px;
   margin-bottom: 6px;
+  color: var(--text-muted);
+}
+
+.legal-ref-meta {
+  font-size: 11px;
   color: var(--text-muted);
 }
 
@@ -1042,6 +1072,10 @@ select {
     box-shadow: 0 0 0 1px rgba(79, 124, 255, 0.15);
   }
 
+  &.expanded {
+    border-color: rgba(79, 124, 255, 0.45);
+  }
+
   &.already-linked {
     opacity: 0.52;
     cursor: not-allowed;
@@ -1091,6 +1125,133 @@ select {
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.legal-card-actions {
+  display: flex;
+  justify-content: flex-start;
+  margin: 8px 0 4px;
+}
+
+.legal-preview-toggle {
+  font-size: 11px;
+  padding: 5px 10px;
+  border-color: rgba(79, 124, 255, 0.22);
+
+  &:hover {
+    border-color: rgba(79, 124, 255, 0.4);
+    background: rgba(79, 124, 255, 0.08);
+  }
+}
+
+.legal-card-preview {
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(79, 124, 255, 0.18);
+  background: rgba(79, 124, 255, 0.05);
+}
+
+.legal-preview-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.legal-preview-page-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #dbeafe;
+  background: rgba(79, 124, 255, 0.14);
+  border: 1px solid rgba(79, 124, 255, 0.2);
+}
+
+.legal-preview-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legal-preview-counter {
+  font-size: 11px;
+  color: var(--text-muted);
+  min-width: 54px;
+  text-align: center;
+}
+
+.legal-preview-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.legal-preview-text {
+  font-size: 12.5px;
+  line-height: 1.7;
+  letter-spacing: 0.01em;
+  color: var(--text);
+  white-space: pre-line;
+
+  &.collapsed {
+    display: -webkit-box;
+    -webkit-line-clamp: 6;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    position: relative;
+    mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+  }
+}
+
+.legal-preview-more {
+  margin-top: 6px;
+  font-size: 11.5px;
+  color: #b9ccff;
+
+  &:hover {
+    color: #dbeafe;
+  }
+}
+
+.legal-chunk-dots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.legal-chunk-dot {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  font-size: 10.5px;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    border-color: rgba(79, 124, 255, 0.35);
+    color: var(--text);
+  }
+
+  &.active {
+    background: rgba(79, 124, 255, 0.14);
+    border-color: rgba(79, 124, 255, 0.3);
+    color: #dbeafe;
+  }
 }
 
 .legal-card-footer {

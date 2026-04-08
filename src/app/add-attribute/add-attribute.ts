@@ -100,6 +100,9 @@ export class AddAttributeComponent implements OnDestroy {
   allLegal: LegalDocumentResult[] = [];
   filteredLegal = signal<LegalDocumentResult[]>([]);
   selectedLegalIds = signal<string[]>([]);
+  expandedLegalDocumentIds = signal<string[]>([]);
+  activeLegalChunkIndexes = signal<Record<string, number>>({});
+  expandedLegalExcerptKeys = signal<Record<string, boolean>>({});
   linkedRefs: LegalDocumentResult[] = [];
   isLoadingLegalDocuments = signal(false);
   toastVisible = signal(false);
@@ -211,6 +214,180 @@ export class AddAttributeComponent implements OnDestroy {
     if (score < 0.6) return 'score-clear';
     if (score < 0.8) return 'score-very-strong';
     return 'score-suspicious';
+  }
+
+  legalPagesLabel(ref: LegalDocumentResult): string | null {
+    const pages = (ref.pageNumbers ?? [])
+      .filter((value) => Number.isInteger(value) && value > 0)
+      .sort((a, b) => a - b);
+
+    if (pages.length === 0 && Number.isInteger(ref.pageNumber) && (ref.pageNumber as number) > 0) {
+      return `Page ${ref.pageNumber}`;
+    }
+
+    if (pages.length === 0) {
+      return null;
+    }
+
+    if (pages.length === 1) {
+      return `Page ${pages[0]}`;
+    }
+
+    const previewPages = pages.slice(0, 4).join(', ');
+    const suffix = pages.length > 4 ? ` +${pages.length - 4}` : '';
+    return `Pages ${previewPages}${suffix}`;
+  }
+
+  legalChunksLabel(ref: LegalDocumentResult): string | null {
+    const count = ref.chunkCount ?? ref.chunks?.length ?? 0;
+    if (!Number.isFinite(count) || count <= 1) {
+      return null;
+    }
+    return `${count} extraits`;
+  }
+
+  hasLegalChunks(ref: LegalDocumentResult): boolean {
+    return (ref.chunks?.length ?? 0) > 1;
+  }
+
+  legalChunks(ref: LegalDocumentResult): NonNullable<LegalDocumentResult['chunks']> {
+    return ref.chunks ?? [];
+  }
+
+  isLegalExpanded(id: string): boolean {
+    return this.expandedLegalDocumentIds().includes(id);
+  }
+
+  toggleLegalPreview(id: string): void {
+    const expanded = this.expandedLegalDocumentIds();
+    this.expandedLegalDocumentIds.set(
+      expanded.includes(id) ? expanded.filter((value) => value !== id) : [...expanded, id]
+    );
+  }
+
+  activeLegalChunkIndex(ref: LegalDocumentResult): number {
+    const chunks = this.legalChunks(ref);
+    if (chunks.length <= 1) {
+      return 0;
+    }
+
+    const activeIndex = this.activeLegalChunkIndexes()[ref.id];
+    if (Number.isInteger(activeIndex) && activeIndex >= 0 && activeIndex < chunks.length) {
+      return activeIndex;
+    }
+
+    return 0;
+  }
+
+  activeLegalChunk(ref: LegalDocumentResult) {
+    const chunks = this.legalChunks(ref);
+    return chunks[this.activeLegalChunkIndex(ref)] ?? null;
+  }
+
+  setActiveLegalChunk(refId: string, index: number): void {
+    this.activeLegalChunkIndexes.update((current) => ({
+      ...current,
+      [refId]: index,
+    }));
+  }
+
+  previousLegalChunk(ref: LegalDocumentResult): void {
+    const chunks = this.legalChunks(ref);
+    if (chunks.length <= 1) return;
+
+    const currentIndex = this.activeLegalChunkIndex(ref);
+    const nextIndex = currentIndex === 0 ? chunks.length - 1 : currentIndex - 1;
+    this.setActiveLegalChunk(ref.id, nextIndex);
+  }
+
+  nextLegalChunk(ref: LegalDocumentResult): void {
+    const chunks = this.legalChunks(ref);
+    if (chunks.length <= 1) return;
+
+    const currentIndex = this.activeLegalChunkIndex(ref);
+    const nextIndex = currentIndex === chunks.length - 1 ? 0 : currentIndex + 1;
+    this.setActiveLegalChunk(ref.id, nextIndex);
+  }
+
+  legalChunkPreview(ref: LegalDocumentResult): string {
+    const chunk = this.activeLegalChunk(ref);
+    if (chunk?.text?.trim()) {
+      return this.formatLegalExcerpt(chunk.text);
+    }
+
+    return this.formatLegalExcerpt(ref.text) || 'Aperçu indisponible';
+  }
+
+  toggleLegalExcerpt(ref: LegalDocumentResult, index?: number): void {
+    const key = this.legalExcerptKey(ref, index);
+    this.expandedLegalExcerptKeys.update((current) => ({
+      ...current,
+      [key]: !current[key],
+    }));
+  }
+
+  isLegalExcerptExpanded(ref: LegalDocumentResult, index?: number): boolean {
+    return !!this.expandedLegalExcerptKeys()[this.legalExcerptKey(ref, index)];
+  }
+
+  canExpandLegalExcerpt(ref: LegalDocumentResult, index?: number): boolean {
+    return this.legalExcerptContent(ref, index).length > 420;
+  }
+
+  legalExcerptContent(ref: LegalDocumentResult, index?: number): string {
+    if (typeof index === 'number') {
+      return this.formatLegalExcerpt(this.legalChunks(ref)[index]?.text ?? '');
+    }
+
+    return this.legalChunkPreview(ref);
+  }
+
+  legalChunkPageLabel(ref: LegalDocumentResult, index?: number): string | null {
+    const chunk = typeof index === 'number' ? this.legalChunks(ref)[index] : this.activeLegalChunk(ref);
+    if (!chunk) return null;
+
+    if (Number.isInteger(chunk.pageNumber) && (chunk.pageNumber as number) > 0) {
+      return `p. ${chunk.pageNumber}`;
+    }
+
+    return null;
+  }
+
+  legalPagesListLabel(ref: LegalDocumentResult): string | null {
+    const pages = (ref.pageNumbers ?? [])
+      .filter((value) => Number.isInteger(value) && value > 0)
+      .sort((a, b) => a - b);
+
+    if (pages.length === 0) {
+      return this.legalChunkPageLabel(ref);
+    }
+
+    if (pages.length === 1) {
+      return `p. ${pages[0]}`;
+    }
+
+    return `p. ${pages[0]} → ${pages[pages.length - 1]}`;
+  }
+
+  private legalExcerptKey(ref: LegalDocumentResult, index?: number): string {
+    const chunkIndex = typeof index === 'number' ? index : this.activeLegalChunkIndex(ref);
+    return `${ref.id}::${chunkIndex}`;
+  }
+
+  private formatLegalExcerpt(text: string | undefined): string {
+    if (!text) {
+      return '';
+    }
+
+    const compact = text
+      .replaceAll(/\r/g, '')
+      .replaceAll(/\t/g, ' ')
+      .replaceAll(/\s{2,}/g, ' ')
+      .replaceAll(/\n{3,}/g, '\n\n')
+      .trim();
+
+    // Restaure des respirations de lecture sur un texte brut provenant des chunks.
+    return compact.replaceAll(/([.!?])\s+(?=[A-Z0-9])/g, '$1\n');
   }
 
   applyConcept(r: SimilarityResult, closeModal = false): void {
