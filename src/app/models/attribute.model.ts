@@ -26,14 +26,6 @@ export interface DomainMember {
   description: string;
 }
 
-export interface LegalReference {
-  id: string;
-  title: string;
-  source: string;
-  snippet: string;
-  confidence: number;
-  keywords: string[];
-}
 
 export interface GeneratedData {
   code: string;
